@@ -1,0 +1,106 @@
+# %%
+!pip install nltk gensim
+
+
+
+# %%
+import nltk
+from nltk.corpus import movie_reviews
+
+# Download the necessary datasets
+nltk.download('movie_reviews')
+nltk.download('punkt')
+nltk.download('wordnet')
+nltk.download('stopwords')
+
+# Load the dataset
+documents = [(list(movie_reviews.words(fileid)), category)
+             for category in movie_reviews.categories()
+             for fileid in movie_reviews.fileids(category)]
+
+# Shuffle the documents
+import random
+random.shuffle(documents)
+
+
+# %%
+from nltk.tokenize import word_tokenize
+from nltk.stem import PorterStemmer, WordNetLemmatizer
+from nltk.corpus import stopwords
+
+# Initialize the stemmer, lemmatizer, and stop words
+stemmer = PorterStemmer()
+lemmatizer = WordNetLemmatizer()
+stop_words = set(stopwords.words('english'))
+
+# Define a preprocessing function
+def preprocess_text(text):
+    # Tokenization
+    tokens = word_tokenize(' '.join(text))
+    
+    # Stemming and Lemmatization
+    stemmed = [stemmer.stem(token) for token in tokens]
+    lemmatized = [lemmatizer.lemmatize(token) for token in stemmed]
+    
+    # Stop-word removal
+    filtered_tokens = [word for word in lemmatized if word.lower() not in stop_words]
+    
+    return filtered_tokens
+
+# Apply preprocessing to the dataset
+preprocessed_documents = [(preprocess_text(text), category) for text, category in documents]
+
+
+# %%
+from gensim.models import Word2Vec
+
+# Extract the preprocessed text
+texts = [text for text, category in preprocessed_documents]
+
+# Train a Word2Vec model
+model = Word2Vec(sentences=texts, vector_size=100, window=5, min_count=1, workers=4)
+
+# Get the embedding for a specific word
+word_embedding = model.wv['good']  # Example word
+print(word_embedding)
+
+
+# %%
+import numpy as np
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
+
+# Create feature vectors for the documents
+def document_vector(doc):
+    doc = [word for word in doc if word in model.wv.key_to_index]
+    return np.mean(model.wv[doc], axis=0)
+
+X = np.array([document_vector(doc) for doc, category in preprocessed_documents if doc])
+y = np.array([1 if category == 'pos' else 0 for doc, category in preprocessed_documents if doc])
+
+# Split the dataset into training and testing sets
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Train a Logistic Regression model
+classifier = LogisticRegression(max_iter=1000)
+classifier.fit(X_train, y_train)
+
+
+
+
+# %%
+# Predict and evaluate the model
+y_pred = classifier.predict(X_test)
+
+accuracy = accuracy_score(y_test, y_pred)
+precision = precision_score(y_test, y_pred)
+recall = recall_score(y_test, y_pred)
+f1 = f1_score(y_test, y_pred)
+
+print(f"Accuracy: {accuracy:.4f}")
+print(f"Precision: {precision:.4f}")
+print(f"Recall: {recall:.4f}")
+print(f"F1-Score: {f1:.4f}")
+
+
